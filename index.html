@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Plasmid-Prep-Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: a bench run sheet. One row per protocol step, one column per tube, under a sticky instrument band. */
+:root{
+  --bg:#EDF1F5; --surface:#FFFFFF; --ink:#0F1B29; --muted:#55667A; --line:#CFD9E3;
+  --accent:#1454CC; --accent-ink:#FFFFFF; --accent-soft:#DDE8FB;
+  --panel:#0E2A55; --panel-2:#1B3E75; --panel-ink:#F3F7FC; --panel-muted:#B4C7E2;
+  --ok:#17704A; --warn:#8F4C00; --warn-soft:#FCEBD3;
+  --alert:#BE1F17; --alert-ink:#FFFFFF; --alert-soft:#FBDFDC;
+  --font-text:"Barlow","Helvetica Neue",Arial,sans-serif;
+  --font-num:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sticky-h:150px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0C131B; --surface:#151F2A; --ink:#E7EEF5; --muted:#9AABBD; --line:#2B3948;
+  --accent:#7DAEFF; --accent-ink:#06182F; --accent-soft:#1B3050;
+  --panel:#16325E; --panel-2:#234779; --panel-ink:#F3F7FC; --panel-muted:#B4C7E2;
+  --ok:#5CCB9B; --warn:#F3B15C; --warn-soft:#3B2A12;
+  --alert:#FF8177; --alert-ink:#2A0503; --alert-soft:#451B19;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0C131B; --surface:#151F2A; --ink:#E7EEF5; --muted:#9AABBD; --line:#2B3948;
+  --accent:#7DAEFF; --accent-ink:#06182F; --accent-soft:#1B3050;
+  --panel:#16325E; --panel-2:#234779; --panel-ink:#F3F7FC; --panel-muted:#B4C7E2;
+  --ok:#5CCB9B; --warn:#F3B15C; --warn-soft:#3B2A12;
+  --alert:#FF8177; --alert-ink:#2A0503; --alert-soft:#451B19;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font:500 16px/1.35 var(--font-text)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 40px}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+.top{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;justify-content:space-between;margin-bottom:12px}
+h1{margin:0;font-size:24px;font-weight:700;line-height:1.15;text-wrap:balance}
+.proto-line{margin:2px 0 0;color:var(--muted);font-size:14px}
+.tools{display:flex;flex-wrap:wrap;gap:6px}
+.tool{min-height:40px;padding:0 12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;font-weight:600;font-size:14px}
+.tool:hover:not(:disabled){border-color:var(--accent)}
+.tool:disabled{opacity:.45;cursor:default}
+.tool.danger{background:var(--alert);border-color:var(--alert);color:var(--alert-ink)}
+#copyBox{width:100%;height:120px;margin-bottom:12px;font:12px/1.4 var(--font-num);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px}
+
+.setup{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:12px}
+.setup summary{cursor:pointer;padding:10px 14px;font-weight:700;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.setup summary span{font-weight:500;color:var(--muted);font-size:14px}
+.setup-body{display:grid;gap:14px;padding:2px 14px 14px}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+.proto{display:flex;flex-wrap:wrap;gap:12px 24px}
+.fld{display:grid;gap:5px;min-width:0}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:fit-content;max-width:100%}
+.seg label{cursor:pointer}
+.seg input{position:absolute;opacity:0;width:1px;height:1px}
+.seg span{display:block;padding:9px 14px;font-weight:600;font-size:15px}
+.seg input:checked + span{background:var(--accent);color:var(--accent-ink)}
+.seg input:focus-visible + span{outline:3px solid var(--accent);outline-offset:-3px}
+fieldset:disabled .seg{opacity:.55}
+fieldset:disabled .seg label{cursor:default}
+.locked{flex-basis:100%;margin:0;font-size:14px;color:var(--muted)}
+.names{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.nf{display:flex;align-items:center;gap:6px;min-width:0}
+.nf input{width:100%;min-width:0;min-height:40px;padding:0 8px;background:var(--bg);border:1px solid var(--line);border-radius:6px}
+.checks{display:flex;flex-wrap:wrap;gap:6px 20px}
+.checks label{display:flex;gap:8px;align-items:center;min-height:32px;cursor:pointer;min-width:0}
+.checks input{width:18px;height:18px;flex:none;accent-color:var(--accent)}
+
+.sticky{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg)}
+.band{background:var(--panel);color:var(--panel-ink);border-radius:10px 10px 0 0;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;min-height:70px}
+.total{display:grid;line-height:1.05}
+.total .lbl{color:var(--panel-muted)}
+.digits{font:600 30px/1.1 var(--font-num);font-variant-numeric:tabular-nums}
+.now{display:flex;flex-wrap:wrap;gap:8px;flex:1 1 240px;min-width:0;align-items:center}
+.next{display:grid;gap:1px;min-width:0}
+.next .lbl{color:var(--panel-muted)}
+.next b{font-weight:700}
+.pill{display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;background:var(--panel-2);color:var(--panel-ink);border:0;border-radius:8px;padding:5px 12px;text-align:left}
+.pill small{display:block;font-size:13px;font-weight:600;color:var(--panel-muted)}
+.pill.over{background:var(--alert);color:var(--alert-ink)}
+.pill.over small{color:var(--alert-ink)}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) repeat(5,84px) 136px;gap:6px;align-items:center}
+.head{background:var(--surface);border:1px solid var(--line);border-top:0;padding:7px 12px}
+.th{display:grid;gap:1px;justify-items:center;text-align:center;min-width:0}
+.th-top{display:flex;gap:5px;align-items:center;justify-content:center;min-width:0;max-width:100%}
+.no{flex:none;display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--surface);font:600 13px var(--font-num)}
+.nm{font-size:13px;font-weight:600;overflow-wrap:anywhere;min-width:0;line-height:1.1}
+.el{font:500 13px var(--font-num);color:var(--muted);font-variant-numeric:tabular-nums}
+.th.fin .el{color:var(--ok)}
+
+.sheet{border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;overflow:hidden}
+.sec{margin:0;padding:12px 12px 5px;font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line)}
+.row{padding:9px 12px;border-bottom:1px solid var(--line);scroll-margin-top:calc(var(--sticky-h) + 12px);scroll-margin-bottom:16px}
+.row:last-child{border-bottom:0}
+.row.active{background:var(--surface);padding-block:12px}
+.row-text{display:grid;grid-template-columns:32px minmax(0,1fr);gap:0 4px;min-width:0}
+.n{font:500 14px/1.5 var(--font-num);color:var(--muted)}
+.t{font-size:16px;text-wrap:pretty}
+.t b{font-weight:700}
+.row.active .t{font-size:18px;font-weight:600;line-height:1.25}
+.row.pending .t,.row.mixed .t{color:var(--muted)}
+.dur{display:inline-block;margin-left:4px;padding:0 6px;border-radius:4px;background:var(--accent-soft);color:var(--ink);font:600 13px/1.5 var(--font-num);white-space:nowrap}
+.note{grid-column:2;margin:3px 0 0;font-size:14px;font-weight:500;color:var(--muted);text-wrap:pretty}
+.row:not(.active) .note{display:none}
+.cell{position:relative;overflow:hidden;min-height:30px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-variant-numeric:tabular-nums;min-width:0}
+.wait::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--line)}
+.done{font:500 12px var(--font-num);color:var(--ok);white-space:nowrap}
+button.cell{min-height:60px;border:2px solid var(--accent);background:var(--accent-soft);color:var(--ink);padding:2px}
+button.cell:hover{filter:brightness(.97)}
+.big{font:600 20px/1.1 var(--font-num)}
+.sub{font-size:12px;font-weight:600;line-height:1.1;color:var(--muted)}
+.bar{position:absolute;left:0;bottom:0;height:5px;width:100%;background:var(--accent);transform-origin:left;transform:scaleX(0)}
+.cell.run{border-color:transparent}
+.cell.limitwarn{background:var(--warn-soft);border-color:var(--warn)}
+.cell.limitwarn .big,.cell.limitwarn .sub{color:var(--warn)}
+.cell.limitover{background:var(--alert-soft);border-color:var(--alert)}
+.cell.limitover .big,.cell.limitover .sub{color:var(--alert)}
+.cell.over{background:var(--alert);border-color:var(--alert);color:var(--alert-ink);animation:pulse 1.1s ease-in-out infinite}
+.cell.over .sub{color:var(--alert-ink)}
+@keyframes pulse{50%{opacity:.72}}
+.all{width:100%;min-height:60px;border:2px solid var(--accent);border-radius:8px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:16px;line-height:1.1;padding:4px 8px}
+.all.quiet{background:transparent;color:var(--accent)}
+.all.urgent{background:var(--alert);border-color:var(--alert);color:var(--alert-ink)}
+.donetime{display:none}
+.row.alldone{padding-block:5px}
+.row.alldone .t{font-size:14px;color:var(--muted)}
+.row.alldone .dur{background:transparent;padding:0}
+
+.finish{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin-top:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--ok);border-radius:10px;font-weight:600}
+.src{margin:14px 2px 0;font-size:13px;color:var(--muted);max-width:75ch}
+
+@media (max-width:859px){
+  .grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .head .hspacer{display:none}
+  .th-top{flex-direction:column;gap:2px}
+  .row-text,.all-wrap{grid-column:1/-1}
+  .all-wrap:empty{display:none}
+  .row.pending .cell,.row.alldone .cell{display:none}
+  .row.alldone .grid{grid-template-columns:minmax(0,1fr) auto}
+  .row.alldone .row-text{grid-column:1}
+  .row.alldone .donetime{display:block;grid-column:2;font:500 12px var(--font-num);color:var(--ok);white-space:nowrap}
+  .big{font-size:clamp(14px,4.2vw,20px)}
+  button.cell{padding:0}
+  .digits{font-size:26px}
+  h1{font-size:21px}
+}
+@media (max-width:520px){
+  .names{grid-template-columns:minmax(0,1fr)}
+  .band{padding:8px 12px}
+}
+@media (prefers-reduced-motion:reduce){.cell.over{animation:none}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Plasmid-Prep-Tracker</h1>
+      <p class="proto-line" id="protoLine"></p>
+    </div>
+    <div class="tools">
+      <button class="tool" id="undo" type="button">↶ Rückgängig</button>
+      <button class="tool" id="sound" type="button">Ton an</button>
+      <button class="tool" id="copy" type="button">Zeiten kopieren</button>
+      <button class="tool" id="reset" type="button">Neuer Lauf</button>
+    </div>
+  </header>
+  <textarea id="copyBox" aria-label="Zeiten zum Kopieren" readonly hidden></textarea>
+
+  <details class="setup" id="setup" open>
+    <summary>Vorbereitung <span id="setupSum"></span></summary>
+    <div class="setup-body">
+      <fieldset class="proto" id="fsProto">
+        <legend class="sr">Protokoll wählen</legend>
+        <div class="fld">
+          <span class="lbl">System</span>
+          <div class="seg">
+            <label><input type="radio" name="kit" id="k-midi" value="midi"><span>Midiprep</span></label>
+            <label><input type="radio" name="kit" id="k-mini" value="mini"><span>Miniprep</span></label>
+          </div>
+        </div>
+        <div class="fld">
+          <span class="lbl" id="m-lbl">Methode</span>
+          <div class="seg">
+            <label><input type="radio" name="method" id="m-spin" value="spin"><span>Zentrifuge</span></label>
+            <label><input type="radio" name="method" id="m-vac" value="vac"><span id="m-vac-l">Vakuum</span></label>
+          </div>
+        </div>
+        <div class="fld">
+          <span class="lbl">Kulturvolumen</span>
+          <div class="seg">
+            <label><input type="radio" name="vol" id="v-std" value="std"><span id="v-std-l"></span></label>
+            <label><input type="radio" name="vol" id="v-alt" value="alt"><span id="v-alt-l"></span></label>
+          </div>
+        </div>
+        <p class="locked" id="locked" hidden>Der Lauf läuft schon. Methode und Volumen lassen sich erst mit „Neuer Lauf“ ändern.</p>
+      </fieldset>
+      <div class="fld">
+        <span class="lbl">Proben benennen (optional)</span>
+        <div class="names" id="names"></div>
+      </div>
+      <div class="fld">
+        <span class="lbl">Vor dem Start prüfen</span>
+        <div class="checks" id="checks"></div>
+      </div>
+    </div>
+  </details>
+
+  <div class="sticky" id="sticky">
+    <div class="band">
+      <div class="total"><span class="lbl">Gesamt</span><span class="digits" id="total">0:00</span></div>
+      <div class="now" id="now"></div>
+    </div>
+    <div class="grid head" id="head"></div>
+  </div>
+
+  <main class="sheet" id="sheet"></main>
+  <div id="finish"></div>
+
+  <p class="src" id="src"></p>
+  <div class="sr" id="live" aria-live="polite"></div>
+</div>
+
+<script>
+(function(){
+'use strict';
+const N = 5, KEY = 'plasmid-prep-tracker-v1';
+const $ = id => document.getElementById(id);
+
+/* ---------- Protocol ---------- */
+const SPIN = 'Zentrifugieren, max. Speed';
+const LYSE = {text:'<b>100 µl</b> Cell Lysis Buffer (blau) zugeben, <b>6×</b> invertieren', note:'Die Lösung wird von trüb zu klar blau.'};
+const NEUT = {text:'<b>350 µl</b> kalte Neutralization Solution (4–8 °C) zugeben, gründlich invertieren',
+  note:'Innerhalb von 2 min nach der Lyse. Die Probe wird gelb und ein gelbes Präzipitat bildet sich. Danach noch 3× invertieren.',
+  limit:{warn:90,max:120}};
+const ELUTE_NOTE = 'Plasmid über 10 kb: 50 µl Elution Buffer (auf 50 °C erwärmt) nehmen und 5–10 min stehen lassen.';
+
+function midiProtocol(elution, vol){
+  const lys = 'Lysat', pur = 'DNA-Reinigung', wash = 'Waschen', elu = 'Eluieren';
+  const big = vol === 'alt';
+  const v = (small, large) => '<b>'+(big ? large : small)+' ml</b>';
+  const end = elution === 'vac' ? [
+    {n:'13', text:'1,5-ml-Tube in die Basis des Eluator-Geräts setzen, Deckel in offener Position sichern'},
+    {n:'14', text:'Eluator zusammensetzen, Binding Column einsetzen, sie muss ganz auf dem Kragen sitzen'},
+    {n:'15', text:'Eluator mit Binding Column auf die Vakuumkammer setzen'},
+    {n:'16a', text:'<b>400–600 µl</b> Nuclease-Free Water auf die Membran der Binding Column'},
+    {n:'16b', text:'Warten', secs:60, short:'Warten'},
+    {n:'16c', text:'Maximales Vakuum anlegen, bis alle Flüssigkeit durch die Säule ist', secs:60, short:'Vakuum', note:'1 min oder so lange, bis die Säule leer ist.'},
+    {n:'17', text:'Tube entnehmen und für Quantifizierung und Gel aufbewahren'}
+  ] : [
+    {n:'18', text:'Binding Column in ein neues 50-ml-Tube setzen'},
+    {n:'19a', text:'<b>600 µl</b> Nuclease-Free Water auf die Membran der Binding Column'},
+    {n:'19b', text:'Warten', secs:60, short:'Warten'},
+    {n:'19c', text:'Zentrifugieren, <b>1.500–2.000 × <i>g</i></b>, Swinging-Bucket-Rotor', secs:300, spin:true, short:'Zentrifuge', note:'50-ml-Tube beim Zentrifugieren nicht verschließen.'},
+    {n:'19d', text:'Filtrat sammeln'}
+  ];
+  return [
+    {n:'1', sec:lys, text:'Zellen pelletieren, <b>5.000 × <i>g</i></b>', secs:600, spin:true, short:'Zentrifuge'},
+    {n:'2', sec:lys, text:'Pellet in '+v(3,6)+' Cell Resuspension Solution resuspendieren'},
+    {n:'3a', sec:lys, text:v(3,6)+' Cell Lysis Solution zugeben, <b>3–5×</b> invertieren'},
+    {n:'3b', sec:lys, text:'Bei Raumtemperatur inkubieren', secs:180, short:'Lyse'},
+    {n:'4', sec:lys, text:v(5,10)+' Neutralization Solution zugeben, <b>5–10×</b> invertieren'},
+    {n:'5', sec:lys, text:'Lysat zentrifugieren, <b>15.000 × <i>g</i></b>, Raumtemperatur', secs:900, spin:true, short:'Zentrifuge'},
+    {n:'6', sec:pur, text:'Säulenstapel bauen: blaue Clearing Column auf weiße Binding Column, auf die Vakuumkammer setzen'},
+    {n:'7', sec:pur, text:'Überstand vorsichtig in den Stapel gießen, Vakuum anlegen, bis alle Flüssigkeit durch beide Säulen ist'},
+    {n:'8', sec:pur, text:'Vakuum <b>langsam</b> lösen, blaue Clearing Column entfernen, Binding Column bleibt auf der Kammer', note:'Falls sich die Membran gelöst hat: mit steriler Pipettenspitze zurückklopfen.'},
+    {n:'9', sec:wash, text:'<b>5,0 ml</b> Endotoxin Removal Wash zugeben, vom Vakuum durchziehen lassen'},
+    {n:'10', sec:wash, text:'<b>20 ml</b> Column Wash Solution zugeben, vom Vakuum durchziehen lassen'},
+    {n:'11', sec:wash, text:'Membran mit Vakuum trocknen', secs:60, durText:'30–60 s', short:'Trocknen', note:'Wiederholen, wenn die Membran noch feucht aussieht oder nach Ethanol riecht.'},
+    {n:'12', sec:wash, text:'Binding Column abnehmen und auf Papiertuch abklopfen, um Ethanolreste zu entfernen'},
+    ...end.map(s => ({...s, sec:elu}))
+  ];
+}
+
+function protocol(kit, method, vol){
+  if(kit === 'midi') return midiProtocol(method, vol);
+  const lys = 'Lysat', wash = 'Waschen', elu = 'Eluieren';
+  let list;
+  if(method === 'spin'){
+    const start = vol === 'alt' ? [
+      {n:'A1', text:'<b>1,5 ml</b> Kultur zentrifugieren, max. Speed', secs:30, spin:true, short:'Zentrifuge'},
+      {n:'A1', text:'Überstand verwerfen'},
+      {n:'A2', text:'Weitere <b>1,5 ml</b> Kultur ins selbe Tube, erneut zentrifugieren', secs:30, spin:true, short:'Zentrifuge'},
+      {n:'A2', text:'Überstand verwerfen'},
+      {n:'A3', text:'Pellet in <b>600 µl</b> TE-Puffer oder Wasser vollständig resuspendieren'}
+    ] : [{n:'1', text:'<b>600 µl</b> Kultur in ein 1,5-ml-Tube geben'}];
+    list = [
+      ...start.map(s => ({...s, sec:lys})),
+      {...LYSE, n:'2', sec:lys},
+      {...NEUT, n:'3', sec:lys},
+      {n:'4', sec:lys, text:SPIN, secs:180, spin:true, short:'Zentrifuge'},
+      {n:'5', sec:lys, text:'Überstand (ca. <b>900 µl</b>) auf die Minicolumn geben, Pellet nicht aufwirbeln'},
+      {n:'6', sec:lys, text:'Minicolumn in Collection Tube setzen, zentrifugieren, max. Speed', secs:15, spin:true, short:'Zentrifuge'},
+      {n:'7', sec:lys, text:'Durchfluss verwerfen, Minicolumn zurück ins selbe Collection Tube'},
+      {n:'8a', sec:wash, text:'<b>200 µl</b> Endotoxin Removal Wash (ERB) auf die Minicolumn'},
+      {n:'8b', sec:wash, text:SPIN, secs:15, spin:true, short:'Zentrifuge'},
+      {n:'9a', sec:wash, text:'<b>400 µl</b> Column Wash Solution (CWC) auf die Minicolumn'},
+      {n:'9b', sec:wash, text:SPIN, secs:30, spin:true, short:'Zentrifuge'},
+      {n:'10a', sec:elu, text:'Minicolumn in frisches 1,5-ml-Tube, <b>30 µl</b> Elution Buffer oder nukleasefreies Wasser direkt auf die Matrix', note:ELUTE_NOTE},
+      {n:'10b', sec:elu, text:'Bei Raumtemperatur stehen lassen', secs:60, short:'Stehen lassen'},
+      {n:'11a', sec:elu, text:'Zentrifugieren zum Eluieren, max. Speed', secs:15, spin:true, short:'Zentrifuge'},
+      {n:'11b', sec:elu, text:'Tube verschließen, Plasmid-DNA bei <b>−20 °C</b> lagern'}
+    ];
+  } else {
+    const start = vol === 'alt' ? [
+      {n:'A1', text:'<b>1,5 ml</b> Kultur zentrifugieren, max. Speed', secs:30, spin:true, short:'Zentrifuge'},
+      {n:'A2', text:'Überstand verwerfen'},
+      {n:'A3', text:'Weitere <b>1,5 ml</b> Kultur ins selbe Tube, erneut zentrifugieren', secs:30, spin:true, short:'Zentrifuge'},
+      {n:'A3', text:'Überstand verwerfen'},
+      {n:'A4', text:'Pellet in <b>600 µl</b> TE-Puffer oder Wasser vollständig resuspendieren'}
+    ] : [
+      {n:'1', text:'<b>1,5 ml</b> Kultur in ein 1,5-ml-Tube geben'},
+      {n:'2', text:SPIN, secs:60, spin:true, short:'Zentrifuge'},
+      {n:'3', text:'Medium abnehmen und verwerfen'},
+      {n:'4', text:'Pellet in <b>600 µl</b> TE-Puffer oder Wasser resuspendieren'}
+    ];
+    list = [
+      ...start.map(s => ({...s, sec:lys})),
+      {...LYSE, n:'5', sec:lys},
+      {...NEUT, n:'6', sec:lys},
+      {n:'7', sec:lys, text:SPIN, secs:180, spin:true, short:'Zentrifuge', note:'Währenddessen die Minicolumns auf die Luer-Lok-Adapter der Vakuumkammer setzen.'},
+      {n:'8', sec:lys, text:'Überstand (ca. <b>900 µl</b>) in die Minicolumn geben'},
+      {n:'9', sec:lys, text:'Vakuum anlegen und Lysat durch die Säule ziehen'},
+      {n:'10', sec:wash, text:'<b>200 µl</b> Endotoxin Removal Wash (ERB) zugeben, vom Vakuum durchziehen lassen'},
+      {n:'11', sec:wash, text:'<b>400 µl</b> Column Wash Solution (CWC) zugeben, vom Vakuum durchziehen lassen'},
+      {n:'11', sec:wash, text:'Vakuum lösen, Minicolumn abnehmen'},
+      {n:'12', sec:elu, text:'Minicolumn in 2-ml-Collection-Tube setzen, zentrifugieren, max. Speed', secs:60, spin:true, short:'Zentrifuge'},
+      {n:'13a', sec:elu, text:'Minicolumn in frisches 1,5-ml-Tube, <b>30 µl</b> Elution Buffer oder nukleasefreies Wasser direkt auf die Matrix', note:ELUTE_NOTE},
+      {n:'13b', sec:elu, text:'Bei Raumtemperatur stehen lassen', secs:60, short:'Stehen lassen'},
+      {n:'14a', sec:elu, text:'Zentrifugieren zum Eluieren, max. Speed', secs:15, spin:true, short:'Zentrifuge'},
+      {n:'14b', sec:elu, text:'Tube verschließen, Plasmid-DNA bei <b>−20 °C</b> lagern'}
+    ];
+  }
+  return list;
+}
+
+/* ---------- State ---------- */
+const freshTubes = () => Array.from({length:N}, () => ({step:0, startedAt:null, log:{}, first:null}));
+const defaults = () => ({kit:'midi', method:'vac', vol:'std', names:Array(N).fill(''), checks:{}, muted:false, tubes:freshTubes(), hist:[]});
+const CHECKS = {
+  midi:[['erb','Endotoxin Removal Wash mit Isopropanol angesetzt'],['cws','Column Wash mit Ethanol angesetzt']],
+  mini:[['cwc','Column Wash Solution mit Ethanol angesetzt'],['cold','Neutralization Solution auf 4–8 °C gekühlt'],['clb','Kein Niederschlag im Cell Lysis Buffer']]
+};
+const SOURCES = {
+  midi:'Schritte und Zeiten stammen aus dem PureYield Plasmid Midiprep Quick Protocol (Part #9FB077, Rev. 12/09). Der Lauf bleibt beim Neuladen auf diesem Gerät erhalten.',
+  mini:'Schritte und Zeiten stammen aus dem PureYield Plasmid Miniprep Quick Protocol (Part #9FB093, Rev. 8/09). Das 2-Minuten-Limit, die Farbhinweise und der Hinweis zu großen Plasmiden stammen aus dem Technical Bulletin TB374 (Rev. 5/09). Der Lauf bleibt beim Neuladen auf diesem Gerät erhalten.'
+};
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(!raw) return null;
+    const o = JSON.parse(raw);
+    if(!o || !Array.isArray(o.tubes) || o.tubes.length !== N) return null;
+    return {...defaults(), ...o};
+  }catch(e){ return null; }
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+let S = load() || defaults();
+let STEPS = protocol(S.kit, S.method, S.vol);
+const started = () => S.tubes.some(t => t.first);
+const allDone = () => S.tubes.every(t => t.step >= STEPS.length);
+
+/* ---------- Formatting ---------- */
+const pad = n => String(n).padStart(2,'0');
+const fmt = s => { s = Math.max(0,s); const h = Math.floor(s/3600), m = Math.floor(s/60)%60; return (h ? h+':'+pad(m) : m)+':'+pad(s%60); };
+const clock = ts => { const d = new Date(ts); return pad(d.getHours())+':'+pad(d.getMinutes()); };
+const clockS = ts => { const d = new Date(ts); return clock(ts)+':'+pad(d.getSeconds()); };
+const durLabel = step => step.durText || (step.secs >= 60 ? (step.secs/60)+' min' : step.secs+' s');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const plain = s => s.replace(/<[^>]+>/g,'');
+const kitLabel = () => S.kit === 'midi' ? 'PureYield Midiprep' : 'PureYield Miniprep';
+const volText = v => S.kit === 'midi'
+  ? (v === 'alt' ? '101–250 ml' : '50–100 ml')
+  : (v === 'alt' ? 'bis 3 ml' : (S.method === 'spin' ? '600 µl' : '1,5 ml'));
+const volLabel = () => volText(S.vol)+' Kultur';
+const methodLabel = () => (S.kit === 'midi' ? 'Elution per ' : '')+(S.method === 'spin' ? 'Zentrifuge' : 'Vakuum');
+
+/* ---------- Actions ---------- */
+function act(tube, i, now){
+  const s = STEPS[i];
+  if(!tube.first) tube.first = now;
+  if(s.secs && !tube.startedAt){ tube.startedAt = now; return; }
+  tube.log[i] = now; tube.step = i+1; tube.startedAt = null;
+}
+function snapshot(){ S.hist.push(JSON.stringify(S.tubes)); if(S.hist.length > 80) S.hist.shift(); }
+function commit(){
+  const wasOpen = !commitStarted && started();
+  if(wasOpen){ commitStarted = true; $('setup').open = false; }
+  save(); render(); followActive(); keepAwake();
+}
+let commitStarted = started();
+function tapCell(t, i){
+  const tube = S.tubes[t];
+  if(tube.step !== i) return;
+  snapshot(); act(tube, i, Date.now()); commit();
+}
+function tapAll(i){
+  const now = Date.now(), s = STEPS[i];
+  const at = S.tubes.filter(t => t.step === i);
+  if(!at.length) return;
+  const idle = s.secs ? at.filter(t => !t.startedAt) : [];
+  snapshot();
+  (idle.length ? idle : at).forEach(t => act(t, i, now));
+  commit();
+}
+function undo(){
+  if(!S.hist.length) return;
+  S.tubes = JSON.parse(S.hist.pop());
+  commitStarted = started();
+  save(); render(); followActive();
+}
+let lastFirst = -1;
+function followActive(){
+  const open = S.tubes.filter(t => t.step < STEPS.length).map(t => t.step);
+  if(!open.length) return;
+  const first = Math.min(...open);
+  if(first === lastFirst) return;
+  lastFirst = first;
+  const el = $('row-'+first);
+  if(el) el.scrollIntoView({block:'nearest', behavior:matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth'});
+}
+
+/* ---------- Render ---------- */
+function render(){
+  STEPS = protocol(S.kit, S.method, S.vol);
+  $('protoLine').textContent = kitLabel()+' · '+methodLabel()+' · '+volLabel();
+  $('setupSum').textContent = (S.kit === 'midi' ? 'Midiprep' : 'Miniprep')+' · '+methodLabel()+' · '+volLabel();
+  $('k-'+S.kit).checked = true;
+  $('m-'+S.method).checked = true;
+  $('v-'+S.vol).checked = true;
+  $('m-lbl').textContent = S.kit === 'midi' ? 'Elution' : 'Methode';
+  $('m-vac-l').textContent = S.kit === 'midi' ? 'Vakuum (Eluator)' : 'Vakuum';
+  $('v-std-l').textContent = volText('std');
+  $('v-alt-l').textContent = volText('alt')+(S.kit === 'mini' ? ', mehr Ausbeute' : '');
+  $('src').textContent = SOURCES[S.kit];
+  const isOn = started();
+  $('fsProto').disabled = isOn;
+  $('locked').hidden = !isOn;
+  $('undo').disabled = !S.hist.length;
+  $('sound').textContent = S.muted ? 'Ton aus' : 'Ton an';
+  $('sound').setAttribute('aria-pressed', String(!S.muted));
+
+  /* column heads */
+  let head = '<div class="lbl hspacer">Schritt</div>';
+  S.tubes.forEach((t,i) => {
+    head += '<div class="th" id="th-'+i+'"><div class="th-top"><span class="no">'+(i+1)+'</span>'+
+      (S.names[i] ? '<span class="nm">'+esc(S.names[i])+'</span>' : '')+'</div><div class="el" data-el="'+i+'">0:00</div></div>';
+  });
+  head += '<div class="hspacer"></div>';
+  $('head').innerHTML = head;
+
+  /* sheet */
+  const focusId = document.activeElement && document.activeElement.id;
+  let html = '', sec = '';
+  STEPS.forEach((s,i) => {
+    if(s.sec !== sec){ sec = s.sec; html += '<h2 class="sec">'+sec+'</h2>'; }
+    const at = S.tubes.filter(t => t.step === i).length;
+    const past = S.tubes.filter(t => t.step > i).length;
+    const cls = at ? 'active' : past === N ? 'alldone' : past ? 'mixed' : 'pending';
+    let note = s.note || '';
+    if(at && s.spin && at % 2 === 1) note = (note ? note+' ' : '')+'Ungerade Anzahl: Gegengewicht-Tube einsetzen.';
+    let cells = '';
+    S.tubes.forEach((tube,t) => {
+      if(tube.step > i){
+        cells += '<div class="cell done" title="Prep '+(t+1)+' fertig um '+clockS(tube.log[i])+'">✓ '+clock(tube.log[i])+'</div>';
+      } else if(tube.step === i){
+        cells += '<button type="button" class="cell" id="c-'+t+'-'+i+'" data-t="'+t+'" data-i="'+i+'"><span class="big"></span><span class="sub"></span><span class="bar"></span></button>';
+      } else {
+        cells += '<div class="cell wait" aria-hidden="true"></div>';
+      }
+    });
+    const lastTime = past === N ? Math.max(...S.tubes.map(t => t.log[i])) : 0;
+    html += '<section class="row '+cls+'" id="row-'+i+'"><div class="grid">'+
+      '<div class="row-text"><span class="n">'+s.n+'</span><span class="t">'+s.text+(s.secs ? ' <span class="dur">'+durLabel(s)+'</span>' : '')+'</span>'+
+      (note ? '<p class="note">'+note+'</p>' : '')+'</div>'+
+      cells+
+      '<div class="all-wrap">'+(at >= 2 ? '<button type="button" class="all" id="all-'+i+'" data-all="'+i+'"></button>' : '')+'</div>'+
+      (lastTime ? '<div class="donetime">✓ '+clock(lastTime)+'</div>' : '')+
+      '</div></section>';
+  });
+  $('sheet').innerHTML = html;
+  if(focusId && $(focusId) && $(focusId) !== document.body) $(focusId).focus({preventScroll:true});
+
+  renderNow();
+  $('finish').innerHTML = allDone()
+    ? '<div class="finish"><span>Alle '+N+' Preps sind fertig. Eluate bei −20 °C lagern.</span></div>' : '';
+  paint();
+  document.documentElement.style.setProperty('--sticky-h', $('sticky').offsetHeight+'px');
+}
+
+function renderNow(){
+  const groups = new Map();
+  S.tubes.forEach((tb,t) => {
+    if(tb.startedAt && tb.step < STEPS.length){
+      const k = tb.step+'|'+tb.startedAt;
+      if(!groups.has(k)) groups.set(k, {i:tb.step, t, members:[]});
+      groups.get(k).members.push(t+1);
+    }
+  });
+  let html = '';
+  groups.forEach(g => {
+    html += '<button type="button" class="pill" data-go="'+g.i+'" data-pt="'+g.t+'"><span class="digits" data-pd></span>'+
+      '<span><small>'+STEPS[g.i].short+' '+durLabel(STEPS[g.i])+'</small><small>Prep '+g.members.join(', ')+'</small></span></button>';
+  });
+  if(!html){
+    if(allDone()){
+      html = '<div class="next"><span class="lbl">Fertig</span><span>Alle '+N+' Preps sind durch.</span></div>';
+    } else {
+      const first = Math.min(...S.tubes.map(t => t.step));
+      const who = S.tubes.map((t,i) => t.step === first ? i+1 : 0).filter(Boolean);
+      html = '<div class="next"><span class="lbl">Als Nächstes · Prep '+who.join(', ')+'</span><span>'+STEPS[first].text+'</span></div>';
+    }
+  }
+  $('now').innerHTML = html;
+}
+
+/* ---------- Live painting ---------- */
+function cellState(t, i, now){
+  const s = STEPS[i], tube = S.tubes[t];
+  if(s.secs){
+    if(!tube.startedAt) return {k:'idle', big:'▶', sub:durLabel(s), label:'Timer starten'};
+    const rem = tube.startedAt + s.secs*1000 - now;
+    if(rem > 0) return {k:'run', big:fmt(Math.ceil(rem/1000)), sub:'', p:1-rem/(s.secs*1000), label:'vorzeitig weiter'};
+    return {k:'over', big:'+'+fmt(Math.floor(-rem/1000)), sub:'Weiter', label:'Zeit um, weiter'};
+  }
+  if(s.limit && tube.log[i-1]){
+    const sec = Math.floor((now - tube.log[i-1])/1000);
+    const k = sec >= s.limit.max ? 'limitover' : sec >= s.limit.warn ? 'limitwarn' : 'limit';
+    return {k, big:fmt(sec), sub:sec >= s.limit.max ? 'über 2 min' : 'Lyse läuft', label:'neutralisiert'};
+  }
+  return {k:'do', big:'✓', sub:'', label:'erledigt'};
+}
+function paint(){
+  const now = Date.now();
+  document.querySelectorAll('button.cell').forEach(el => {
+    const t = +el.dataset.t, i = +el.dataset.i, st = cellState(t, i, now);
+    el.className = 'cell '+st.k;
+    el.children[0].textContent = st.big;
+    el.children[1].textContent = st.sub;
+    el.children[2].style.transform = 'scaleX('+(st.p || 0)+')';
+    el.setAttribute('aria-label', 'Prep '+(t+1)+', '+st.big+', '+st.label);
+  });
+  document.querySelectorAll('button.all').forEach(el => {
+    const i = +el.dataset.all, s = STEPS[i];
+    const at = S.tubes.map((t,x) => t.step === i ? x : -1).filter(x => x >= 0);
+    const states = at.map(t => cellState(t, i, now).k);
+    const idle = states.filter(k => k === 'idle').length;
+    let label, cls = 'all';
+    if(idle){ label = idle === at.length ? '▶ Alle '+idle+' starten' : '▶ '+idle+' starten'; }
+    else if(s.secs){
+      label = '✓ Alle '+at.length+' weiter';
+      if(states.includes('over')) cls += ' urgent'; else cls += ' quiet';
+    } else { label = '✓ Alle '+at.length+' erledigt'; }
+    el.className = cls;
+    el.textContent = label;
+  });
+  document.querySelectorAll('[data-pt]').forEach(el => {
+    const t = +el.dataset.pt, i = +el.dataset.go, st = cellState(t, i, now);
+    el.classList.toggle('over', st.k === 'over');
+    el.querySelector('[data-pd]').textContent = st.big;
+  });
+  document.querySelectorAll('[data-el]').forEach(el => {
+    const t = +el.dataset.el, tb = S.tubes[t], fin = tb.step >= STEPS.length;
+    const end = fin ? tb.log[STEPS.length-1] : now;
+    el.textContent = (fin ? '✓ ' : '')+fmt(tb.first ? Math.floor((end - tb.first)/1000) : 0);
+    el.parentElement.classList.toggle('fin', fin);
+  });
+  const firsts = S.tubes.filter(t => t.first).map(t => t.first);
+  const end = allDone() ? Math.max(...S.tubes.map(t => t.log[STEPS.length-1])) : now;
+  $('total').textContent = fmt(firsts.length ? Math.floor((end - Math.min(...firsts))/1000) : 0);
+  alarms(now);
+}
+
+/* ---------- Sound ---------- */
+let ac = null;
+function ensureAudio(){
+  try{
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    if(ac.state === 'suspended') ac.resume();
+  }catch(e){}
+}
+function beep(pattern){
+  if(S.muted || !ac) return;
+  try{
+    const t0 = ac.currentTime;
+    pattern.forEach(([f,at,d]) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'square'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0+at);
+      g.gain.exponentialRampToValueAtTime(0.22, t0+at+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+at+d);
+      o.connect(g); g.connect(ac.destination);
+      o.start(t0+at); o.stop(t0+at+d+0.02);
+    });
+  }catch(e){}
+  if(navigator.vibrate) try{ navigator.vibrate([200,100,200]); }catch(e){}
+}
+const RING_END = [[880,0,.18],[880,.25,.18],[1175,.5,.32]];
+const RING_WARN = [[660,0,.22],[660,.3,.22]];
+const rung = new Set();
+let lastRing = 0;
+function say(msg){ $('live').textContent = msg; }
+function alarms(now){
+  const ended = [], warned = [], limited = [];
+  let due = false;
+  S.tubes.forEach((tb,t) => {
+    const s = STEPS[tb.step];
+    if(!s) return;
+    if(s.secs && tb.startedAt){
+      const over = now - (tb.startedAt + s.secs*1000);
+      if(over >= 0){
+        const k = 'e'+t+'-'+tb.step+'-'+tb.startedAt;
+        if(!rung.has(k)){ rung.add(k); ended.push(t+1); }
+        if(over < 300000) due = true;
+      }
+    } else if(s.limit && tb.log[tb.step-1]){
+      const sec = (now - tb.log[tb.step-1])/1000, base = t+'-'+tb.log[tb.step-1];
+      if(sec >= s.limit.max && !rung.has('m'+base)){ rung.add('m'+base); limited.push(t+1); }
+      else if(sec >= s.limit.warn && !rung.has('w'+base)){ rung.add('w'+base); warned.push(t+1); }
+    }
+  });
+  if(ended.length){ beep(RING_END); lastRing = now; say('Zeit um: Prep '+ended.join(', ')); }
+  else if(limited.length){ beep(RING_END); lastRing = now; say('Lyse über 2 Minuten: Prep '+limited.join(', ')); }
+  else if(warned.length){ beep(RING_WARN); say('Lyse fast 2 Minuten: Prep '+warned.join(', ')); }
+  else if(due && now - lastRing > 20000){ beep(RING_END); lastRing = now; }
+}
+
+/* ---------- Screen stays on ---------- */
+let wake = null;
+async function keepAwake(){
+  try{
+    if(!wake && 'wakeLock' in navigator && document.visibilityState === 'visible' && started() && !allDone()){
+      wake = await navigator.wakeLock.request('screen');
+      wake.addEventListener('release', () => { wake = null; });
+    }
+  }catch(e){}
+}
+
+/* ---------- Copy log ---------- */
+function logText(){
+  const d = new Date(), names = S.tubes.map((t,i) => S.names[i] || 'Prep '+(i+1));
+  const lines = ['Plasmid-Prep-Lauf '+pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.'+d.getFullYear()+' | '+kitLabel()+', '+methodLabel()+', '+volLabel()];
+  lines.push(['Schritt', ...names].join('\t'));
+  STEPS.forEach((s,i) => {
+    lines.push([s.n+' '+plain(s.text)+(s.secs ? ' ('+durLabel(s)+')' : ''), ...S.tubes.map(t => t.log[i] ? clockS(t.log[i]) : '')].join('\t'));
+  });
+  lines.push(['Dauer', ...S.tubes.map(t => {
+    const last = t.log[STEPS.length-1];
+    return t.first && last ? fmt(Math.floor((last - t.first)/1000)) : '';
+  })].join('\t'));
+  return lines.join('\n');
+}
+function flash(btn, msg){
+  const old = btn.dataset.label || btn.textContent;
+  btn.dataset.label = old; btn.textContent = msg;
+  setTimeout(() => { btn.textContent = old; delete btn.dataset.label; }, 2000);
+}
+function copyFallback(text){
+  const box = $('copyBox');
+  box.value = text; box.hidden = false; box.focus(); box.select();
+  flash($('copy'), 'Bitte manuell kopieren');
+}
+
+/* ---------- Events ---------- */
+document.addEventListener('pointerdown', () => { ensureAudio(); keepAwake(); }, {capture:true});
+document.addEventListener('keydown', ensureAudio, {capture:true});
+document.addEventListener('visibilitychange', () => { paint(); keepAwake(); });
+$('sheet').addEventListener('click', e => {
+  const all = e.target.closest('[data-all]');
+  if(all){ tapAll(+all.dataset.all); return; }
+  const c = e.target.closest('button.cell');
+  if(c) tapCell(+c.dataset.t, +c.dataset.i);
+});
+$('now').addEventListener('click', e => {
+  const p = e.target.closest('[data-go]');
+  if(p){ const r = $('row-'+p.dataset.go); if(r) r.scrollIntoView({block:'nearest'}); }
+});
+$('undo').addEventListener('click', undo);
+$('sound').addEventListener('click', () => {
+  S.muted = !S.muted; ensureAudio(); save(); render();
+  if(!S.muted) beep(RING_WARN);
+});
+$('copy').addEventListener('click', () => {
+  const text = logText();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(() => { $('copyBox').hidden = true; flash($('copy'), 'Kopiert'); }, () => copyFallback(text));
+  } else copyFallback(text);
+});
+let resetArm = null;
+$('reset').addEventListener('click', () => {
+  const b = $('reset');
+  if(!resetArm && started()){
+    b.textContent = 'Wirklich alles löschen?'; b.classList.add('danger');
+    resetArm = setTimeout(() => { resetArm = null; b.textContent = 'Neuer Lauf'; b.classList.remove('danger'); }, 4000);
+    return;
+  }
+  clearTimeout(resetArm); resetArm = null;
+  b.textContent = 'Neuer Lauf'; b.classList.remove('danger');
+  S.tubes = freshTubes(); S.hist = []; S.checks = {};
+  rung.clear(); lastFirst = -1; commitStarted = false;
+  renderChecks();
+  $('copyBox').hidden = true;
+  $('setup').open = true;
+  save(); render();
+  window.scrollTo(0,0);
+});
+document.querySelectorAll('input[name=kit]').forEach(r => r.addEventListener('change', () => {
+  S.kit = r.value; S.method = r.value === 'midi' ? 'vac' : 'spin'; S.vol = 'std';
+  renderChecks(); save(); render();
+}));
+document.querySelectorAll('input[name=method]').forEach(r => r.addEventListener('change', () => { S.method = r.value; save(); render(); }));
+document.querySelectorAll('input[name=vol]').forEach(r => r.addEventListener('change', () => { S.vol = r.value; save(); render(); }));
+function renderChecks(){
+  $('checks').innerHTML = CHECKS[S.kit].map(([k,txt]) =>
+    '<label><input type="checkbox" id="chk-'+k+'" data-chk="'+k+'"'+(S.checks[k] ? ' checked' : '')+'> '+txt+'</label>').join('');
+}
+$('checks').addEventListener('change', e => { if(e.target.dataset.chk){ S.checks[e.target.dataset.chk] = e.target.checked; save(); } });
+
+/* names */
+(function(){
+  let h = '';
+  for(let i = 0; i < N; i++){
+    h += '<label class="nf"><span class="no">'+(i+1)+'</span><span class="sr">Name für Prep '+(i+1)+'</span><input type="text" id="name-'+i+'" maxlength="24" placeholder="Prep '+(i+1)+'" autocomplete="off"></label>';
+  }
+  $('names').innerHTML = h;
+  for(let i = 0; i < N; i++){
+    const inp = $('name-'+i);
+    inp.value = S.names[i] || '';
+    inp.addEventListener('input', () => { S.names[i] = inp.value.trim(); save(); render(); });
+  }
+})();
+
+/* ---------- Boot ---------- */
+renderChecks();
+if(started()) $('setup').open = false;
+window.addEventListener('resize', () => document.documentElement.style.setProperty('--sticky-h', $('sticky').offsetHeight+'px'));
+render();
+setInterval(paint, 250);
+})();
+</script>
+</body>
+</html>
