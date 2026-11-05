@@ -1,6 +1,6 @@
 # Plasmid-Prep-Tracker
 
-Laufzettel für die Laborbank: fünf PureYield-Plasmid-Preps parallel verfolgen, mit eigenem Timer für jede Prep.
+Laufzettel für die Laborbank: 1 bis 12 PureYield-Plasmid-Preps parallel verfolgen, mit eigenem Timer für jede Prep.
 
 **Direkt nutzen:** https://reismehlsamen.github.io/plasmid-prep-tracker/
 

@@ -72,7 +72,13 @@ fieldset{border:0;margin:0;padding:0;min-width:0}
 fieldset:disabled .seg{opacity:.55}
 fieldset:disabled .seg label{cursor:default}
 .locked{flex-basis:100%;margin:0;font-size:14px;color:var(--muted)}
-.names{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.stepper{display:flex;align-items:center;gap:6px}
+.stepper button{width:44px;height:44px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:22px;font-weight:600;line-height:1}
+.stepper button:hover:not(:disabled){border-color:var(--accent)}
+.stepper button:disabled{opacity:.4;cursor:default}
+.stepper output{min-width:2.2ch;text-align:center;font:600 24px var(--font-num);font-variant-numeric:tabular-nums}
+.hint{margin:0;font-size:14px;color:var(--muted)}
+.names{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px}
 .nf{display:flex;align-items:center;gap:6px;min-width:0}
 .nf input{width:100%;min-width:0;min-height:40px;padding:0 8px;background:var(--bg);border:1px solid var(--line);border-radius:6px}
 .checks{display:flex;flex-wrap:wrap;gap:6px 20px}
@@ -93,7 +99,7 @@ fieldset:disabled .seg label{cursor:default}
 .pill.over{background:var(--alert);color:var(--alert-ink)}
 .pill.over small{color:var(--alert-ink)}
 
-.grid{display:grid;grid-template-columns:minmax(0,1fr) repeat(5,84px) 136px;gap:6px;align-items:center}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) repeat(var(--n,5),84px) 136px;gap:6px;align-items:center}
 .head{background:var(--surface);border:1px solid var(--line);border-top:0;padding:7px 12px}
 .th{display:grid;gap:1px;justify-items:center;text-align:center;min-width:0}
 .th-top{display:flex;gap:5px;align-items:center;justify-content:center;min-width:0;max-width:100%}
@@ -143,23 +149,23 @@ button.cell:hover{filter:brightness(.97)}
 .finish{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin-top:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--ok);border-radius:10px;font-weight:600}
 .src{margin:14px 2px 0;font-size:13px;color:var(--muted);max-width:75ch}
 
+/* Stacked: step text above the cells. Set by script whenever the columns no longer fit beside the text. */
+.stacked .grid{grid-template-columns:repeat(var(--cols,5),minmax(0,1fr))}
+.stacked .head .hspacer{display:none}
+.stacked .th-top{flex-direction:column;gap:2px}
+.stacked .row-text,.stacked .all-wrap{grid-column:1/-1}
+.stacked .all-wrap:empty{display:none}
+.stacked .row.pending .cell,.stacked .row.alldone .cell{display:none}
+.stacked .row.alldone .grid{grid-template-columns:minmax(0,1fr) auto}
+.stacked .row.alldone .row-text{grid-column:1}
+.stacked .row.alldone .donetime{display:block;grid-column:2;font:500 12px var(--font-num);color:var(--ok);white-space:nowrap}
+.stacked .big{font-size:clamp(13px,3.9vw,20px)}
+.stacked button.cell{padding:0}
 @media (max-width:859px){
-  .grid{grid-template-columns:repeat(5,minmax(0,1fr))}
-  .head .hspacer{display:none}
-  .th-top{flex-direction:column;gap:2px}
-  .row-text,.all-wrap{grid-column:1/-1}
-  .all-wrap:empty{display:none}
-  .row.pending .cell,.row.alldone .cell{display:none}
-  .row.alldone .grid{grid-template-columns:minmax(0,1fr) auto}
-  .row.alldone .row-text{grid-column:1}
-  .row.alldone .donetime{display:block;grid-column:2;font:500 12px var(--font-num);color:var(--ok);white-space:nowrap}
-  .big{font-size:clamp(14px,4.2vw,20px)}
-  button.cell{padding:0}
   .digits{font-size:26px}
   h1{font-size:21px}
 }
 @media (max-width:520px){
-  .names{grid-template-columns:minmax(0,1fr)}
   .band{padding:8px 12px}
 }
 @media (prefers-reduced-motion:reduce){.cell.over{animation:none}}
@@ -167,7 +173,7 @@ button.cell:hover{filter:brightness(.97)}
 </head>
 <body>
 
-<div class="wrap">
+<div class="wrap" id="app">
   <header class="top">
     <div>
       <h1>Plasmid-Prep-Tracker</h1>
@@ -211,6 +217,15 @@ button.cell:hover{filter:brightness(.97)}
         <p class="locked" id="locked" hidden>Der Lauf läuft schon. Methode und Volumen lassen sich erst mit „Neuer Lauf“ ändern.</p>
       </fieldset>
       <div class="fld">
+        <span class="lbl" id="cnt-lbl">Anzahl Preps</span>
+        <div class="stepper" role="group" aria-labelledby="cnt-lbl">
+          <button type="button" id="cnt-minus" aria-label="Eine Prep weniger">−</button>
+          <output id="cnt" aria-live="polite"></output>
+          <button type="button" id="cnt-plus" aria-label="Eine Prep mehr">+</button>
+        </div>
+        <p class="hint" id="cnt-hint" hidden>Während des Laufs hängt + eine neue Prep an und − entfernt die letzte. „Rückgängig“ holt sie zurück.</p>
+      </div>
+      <div class="fld">
         <span class="lbl">Proben benennen (optional)</span>
         <div class="names" id="names"></div>
       </div>
@@ -239,12 +254,12 @@ button.cell:hover{filter:brightness(.97)}
 <script>
 (function(){
 'use strict';
-const N = 5, KEY = 'plasmid-prep-tracker-v1';
+const MAX = 12, START = 5, KEY = 'plasmid-prep-tracker-v1';
 const $ = id => document.getElementById(id);
 
 /* ---------- Protocol ---------- */
 const SPIN = 'Zentrifugieren, max. Speed';
-const LYSE = {text:'<b>100 µl</b> Cell Lysis Buffer (blau) zugeben, <b>6×</b> invertieren', note:'Die Lösung wird von trüb zu klar blau.'};
+const LYSE = {lyse:true, text:'<b>100 µl</b> Cell Lysis Buffer (blau) zugeben, <b>6×</b> invertieren', note:'Die Lösung wird von trüb zu klar blau.'};
 const NEUT = {text:'<b>350 µl</b> kalte Neutralization Solution (4–8 °C) zugeben, gründlich invertieren',
   note:'Innerhalb von 2 min nach der Lyse. Die Probe wird gelb und ein gelbes Präzipitat bildet sich. Danach noch 3× invertieren.',
   limit:{warn:90,max:120}};
@@ -350,8 +365,9 @@ function protocol(kit, method, vol){
 }
 
 /* ---------- State ---------- */
-const freshTubes = () => Array.from({length:N}, () => ({step:0, startedAt:null, log:{}, first:null}));
-const defaults = () => ({kit:'midi', method:'vac', vol:'std', names:Array(N).fill(''), checks:{}, muted:false, tubes:freshTubes(), hist:[]});
+const freshTube = () => ({step:0, startedAt:null, log:{}, first:null});
+const freshTubes = n => Array.from({length:n}, freshTube);
+const defaults = () => ({kit:'midi', method:'vac', vol:'std', names:Array(MAX).fill(''), checks:{}, muted:false, tubes:freshTubes(START), hist:[]});
 const CHECKS = {
   midi:[['erb','Endotoxin Removal Wash mit Isopropanol angesetzt'],['cws','Column Wash mit Ethanol angesetzt']],
   mini:[['cwc','Column Wash Solution mit Ethanol angesetzt'],['cold','Neutralization Solution auf 4–8 °C gekühlt'],['clb','Kein Niederschlag im Cell Lysis Buffer']]
@@ -365,8 +381,9 @@ function load(){
     const raw = localStorage.getItem(KEY);
     if(!raw) return null;
     const o = JSON.parse(raw);
-    if(!o || !Array.isArray(o.tubes) || o.tubes.length !== N) return null;
-    return {...defaults(), ...o};
+    if(!o || !Array.isArray(o.tubes) || o.tubes.length < 1 || o.tubes.length > MAX) return null;
+    const names = Array.from({length:MAX}, (_,i) => (o.names && o.names[i]) || '');
+    return {...defaults(), ...o, names};
   }catch(e){ return null; }
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
@@ -389,6 +406,8 @@ const volText = v => S.kit === 'midi'
   : (v === 'alt' ? 'bis 3 ml' : (S.method === 'spin' ? '600 µl' : '1,5 ml'));
 const volLabel = () => volText(S.vol)+' Kultur';
 const methodLabel = () => (S.kit === 'midi' ? 'Elution per ' : '')+(S.method === 'spin' ? 'Zentrifuge' : 'Vakuum');
+const countLabel = () => S.tubes.length+(S.tubes.length === 1 ? ' Prep' : ' Preps');
+const allFinished = () => S.tubes.length === 1 ? 'Die Prep ist fertig.' : 'Alle '+S.tubes.length+' Preps sind fertig.';
 
 /* ---------- Actions ---------- */
 function act(tube, i, now){
@@ -424,6 +443,20 @@ function undo(){
   commitStarted = started();
   save(); render(); followActive();
 }
+function changeCount(delta){
+  const n = S.tubes.length + delta;
+  if(n < 1 || n > MAX) return;
+  if(started()) snapshot();
+  if(delta > 0) S.tubes.push(freshTube()); else S.tubes.pop();
+  commitStarted = started();
+  save(); render();
+}
+function layout(){
+  const app = $('app'), n = S.tubes.length, gap = 6, w = $('sheet').clientWidth - 24;
+  app.classList.toggle('stacked', w < 280 + n*(84+gap) + 136 + gap);
+  app.style.setProperty('--n', n);
+  app.style.setProperty('--cols', Math.max(1, Math.min(n, Math.floor((w+gap)/(54+gap)))));
+}
 let lastFirst = -1;
 function followActive(){
   const open = S.tubes.filter(t => t.step < STEPS.length).map(t => t.step);
@@ -439,7 +472,13 @@ function followActive(){
 function render(){
   STEPS = protocol(S.kit, S.method, S.vol);
   $('protoLine').textContent = kitLabel()+' · '+methodLabel()+' · '+volLabel();
-  $('setupSum').textContent = (S.kit === 'midi' ? 'Midiprep' : 'Miniprep')+' · '+methodLabel()+' · '+volLabel();
+  $('setupSum').textContent = countLabel()+' · '+(S.kit === 'midi' ? 'Midiprep' : 'Miniprep')+' · '+methodLabel()+' · '+volLabel();
+  const count = S.tubes.length;
+  $('cnt').textContent = count;
+  $('cnt-minus').disabled = count <= 1;
+  $('cnt-plus').disabled = count >= MAX;
+  if($('names').children.length !== count) renderNames();
+  layout();
   $('k-'+S.kit).checked = true;
   $('m-'+S.method).checked = true;
   $('v-'+S.vol).checked = true;
@@ -451,6 +490,7 @@ function render(){
   const isOn = started();
   $('fsProto').disabled = isOn;
   $('locked').hidden = !isOn;
+  $('cnt-hint').hidden = !isOn;
   $('undo').disabled = !S.hist.length;
   $('sound').textContent = S.muted ? 'Ton aus' : 'Ton an';
   $('sound').setAttribute('aria-pressed', String(!S.muted));
@@ -471,8 +511,9 @@ function render(){
     if(s.sec !== sec){ sec = s.sec; html += '<h2 class="sec">'+sec+'</h2>'; }
     const at = S.tubes.filter(t => t.step === i).length;
     const past = S.tubes.filter(t => t.step > i).length;
-    const cls = at ? 'active' : past === N ? 'alldone' : past ? 'mixed' : 'pending';
+    const cls = at ? 'active' : past === count ? 'alldone' : past ? 'mixed' : 'pending';
     let note = s.note || '';
+    if(s.lyse && count > 10) note += ' Mehr als 10 Proben: in Gruppen von höchstens 10 arbeiten und die nächste Gruppe erst nach dem Neutralisieren starten.';
     if(at && s.spin && at % 2 === 1) note = (note ? note+' ' : '')+'Ungerade Anzahl: Gegengewicht-Tube einsetzen.';
     let cells = '';
     S.tubes.forEach((tube,t) => {
@@ -484,7 +525,7 @@ function render(){
         cells += '<div class="cell wait" aria-hidden="true"></div>';
       }
     });
-    const lastTime = past === N ? Math.max(...S.tubes.map(t => t.log[i])) : 0;
+    const lastTime = past === count ? Math.max(...S.tubes.map(t => t.log[i])) : 0;
     html += '<section class="row '+cls+'" id="row-'+i+'"><div class="grid">'+
       '<div class="row-text"><span class="n">'+s.n+'</span><span class="t">'+s.text+(s.secs ? ' <span class="dur">'+durLabel(s)+'</span>' : '')+'</span>'+
       (note ? '<p class="note">'+note+'</p>' : '')+'</div>'+
@@ -498,7 +539,7 @@ function render(){
 
   renderNow();
   $('finish').innerHTML = allDone()
-    ? '<div class="finish"><span>Alle '+N+' Preps sind fertig. Eluate bei −20 °C lagern.</span></div>' : '';
+    ? '<div class="finish"><span>'+allFinished()+(S.kit === 'mini' ? ' Eluate bei −20 °C lagern.' : '')+'</span></div>' : '';
   paint();
   document.documentElement.style.setProperty('--sticky-h', $('sticky').offsetHeight+'px');
 }
@@ -519,7 +560,7 @@ function renderNow(){
   });
   if(!html){
     if(allDone()){
-      html = '<div class="next"><span class="lbl">Fertig</span><span>Alle '+N+' Preps sind durch.</span></div>';
+      html = '<div class="next"><span class="lbl">Fertig</span><span>'+allFinished()+'</span></div>';
     } else {
       const first = Math.min(...S.tubes.map(t => t.step));
       const who = S.tubes.map((t,i) => t.step === first ? i+1 : 0).filter(Boolean);
@@ -691,6 +732,8 @@ $('now').addEventListener('click', e => {
   if(p){ const r = $('row-'+p.dataset.go); if(r) r.scrollIntoView({block:'nearest'}); }
 });
 $('undo').addEventListener('click', undo);
+$('cnt-minus').addEventListener('click', () => changeCount(-1));
+$('cnt-plus').addEventListener('click', () => changeCount(1));
 $('sound').addEventListener('click', () => {
   S.muted = !S.muted; ensureAudio(); save(); render();
   if(!S.muted) beep(RING_WARN);
@@ -711,7 +754,7 @@ $('reset').addEventListener('click', () => {
   }
   clearTimeout(resetArm); resetArm = null;
   b.textContent = 'Neuer Lauf'; b.classList.remove('danger');
-  S.tubes = freshTubes(); S.hist = []; S.checks = {};
+  S.tubes = freshTubes(S.tubes.length); S.hist = []; S.checks = {};
   rung.clear(); lastFirst = -1; commitStarted = false;
   renderChecks();
   $('copyBox').hidden = true;
@@ -732,23 +775,24 @@ function renderChecks(){
 $('checks').addEventListener('change', e => { if(e.target.dataset.chk){ S.checks[e.target.dataset.chk] = e.target.checked; save(); } });
 
 /* names */
-(function(){
+function renderNames(){
+  const count = S.tubes.length;
   let h = '';
-  for(let i = 0; i < N; i++){
+  for(let i = 0; i < count; i++){
     h += '<label class="nf"><span class="no">'+(i+1)+'</span><span class="sr">Name für Prep '+(i+1)+'</span><input type="text" id="name-'+i+'" maxlength="24" placeholder="Prep '+(i+1)+'" autocomplete="off"></label>';
   }
   $('names').innerHTML = h;
-  for(let i = 0; i < N; i++){
+  for(let i = 0; i < count; i++){
     const inp = $('name-'+i);
     inp.value = S.names[i] || '';
     inp.addEventListener('input', () => { S.names[i] = inp.value.trim(); save(); render(); });
   }
-})();
+}
 
 /* ---------- Boot ---------- */
 renderChecks();
 if(started()) $('setup').open = false;
-window.addEventListener('resize', () => document.documentElement.style.setProperty('--sticky-h', $('sticky').offsetHeight+'px'));
+window.addEventListener('resize', () => { layout(); document.documentElement.style.setProperty('--sticky-h', $('sticky').offsetHeight+'px'); });
 render();
 setInterval(paint, 250);
 })();
